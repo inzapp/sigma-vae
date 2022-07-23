@@ -43,7 +43,6 @@ class VariationalAutoEncoder:
                  iterations=100000,
                  validation_split=0.2,
                  view_grid_size=4,
-                 ae_burn=1000,
                  validation_image_path='',
                  pretrained_model_path='',
                  checkpoint_path='checkpoints',
@@ -57,7 +56,6 @@ class VariationalAutoEncoder:
         self.latent_dim = latent_dim
         self.checkpoint_path = checkpoint_path
         self.view_grid_size = view_grid_size
-        self.ae_burn = ae_burn
         plt.style.use(['dark_background'])
         plt.tight_layout(0.5)
         self.fig, _ = plt.subplots()
@@ -104,21 +102,34 @@ class VariationalAutoEncoder:
     def graph_forward(self, model, x):
         return model(x, training=False)
 
+    # @tf.function
+    # def train_step_vae(self, model, optimizer, x, y_true):
+    #     def softclip(tensor, min_val):
+    #         return min_val + K.softplus(tensor - min_val)
+    #     def gaussian_nll(mu, log_sigma, x):
+    #         return 0.5 * K.square((x - mu) / K.exp(log_sigma)) + log_sigma + 0.5 * K.log(np.pi * 2.0)
+    #     with tf.GradientTape() as tape:
+    #         batch_size = K.cast(K.shape(x)[0], dtype=tf.float32)
+    #         y_pred, mu, log_var = model(x, training=True)
+    #         log_sigma = K.log(K.sqrt(tf.reduce_mean(K.square(y_true - y_pred))))
+    #         log_sigma = softclip(log_sigma, -6.0)
+    #         reconstruction_loss = tf.reduce_sum(gaussian_nll(y_pred, log_sigma, y_true)) / batch_size
+    #         kl_loss = -0.5 * (1.0 + log_var - K.square(mu) - tf.exp(log_var))
+    #         kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
+    #         loss = reconstruction_loss + kl_loss
+    #     gradients = tape.gradient(loss, model.trainable_variables)
+    #     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+    #     return reconstruction_loss, kl_loss
+
     @tf.function
     def train_step_vae(self, model, optimizer, x, y_true):
-        def softclip(tensor, min_val):
-            return min_val + K.softplus(tensor - min_val)
-        def gaussian_nll(mu, log_sigma, x):
-            return 0.5 * K.square((x - mu) / K.exp(log_sigma)) + log_sigma + 0.5 * K.log(np.pi * 2.0)
         with tf.GradientTape() as tape:
             batch_size = K.cast(K.shape(x)[0], dtype=tf.float32)
             y_pred, mu, log_var = model(x, training=True)
-            log_sigma = K.log(K.sqrt(tf.reduce_mean(K.square(y_true - y_pred))))
-            log_sigma = softclip(log_sigma, -6.0)
-            reconstruction_loss = tf.reduce_sum(gaussian_nll(y_pred, log_sigma, y_true)) / batch_size
+            reconstruction_loss = tf.reduce_sum(tf.square(y_true - y_pred)) / batch_size
             kl_loss = -0.5 * (1.0 + log_var - K.square(mu) - tf.exp(log_var))
             kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
-            loss = reconstruction_loss + kl_loss
+            loss = reconstruction_loss + (kl_loss * 1.0)
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         return reconstruction_loss, kl_loss
@@ -129,10 +140,10 @@ class VariationalAutoEncoder:
         os.makedirs(self.checkpoint_path, exist_ok=True)
         while True:
             for batch_x in self.train_data_generator:
-                iteration_count += 1
-                loss_str = f'[iteration count : {iteration_count:6d}]'
+                self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
                 reconstruction_loss, kl_loss = self.train_step_vae(self.vae, optimizer, batch_x, batch_x)
-                loss_str += f' reconstruction_loss : {reconstruction_loss:.4f}, kl_loss : {kl_loss:.4f}'
+                iteration_count += 1
+                loss_str = f'[iteration count : {iteration_count:6d}] reconstruction_loss : {reconstruction_loss:.4f}, kl_loss : {kl_loss:.4f}'
                 print(loss_str)
                 if self.training_view:
                     self.show_generated_images()
