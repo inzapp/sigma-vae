@@ -1,0 +1,304 @@
+"""
+Authors : inzapp
+
+Github url : https://github.com/inzapp/vae
+
+Copyright 2022 inzapp Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"),
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+import os
+import natsort
+import numpy as np
+import tensorflow as tf
+import tensorflow.keras.backend as K
+import matplotlib.pyplot as plt
+
+from cv2 import cv2
+from glob import glob
+from tqdm import tqdm
+from time import time
+from model import Model
+from lr_scheduler import LRScheduler
+from generator import DataGenerator
+
+
+class VariationalAutoEncoder:
+    def __init__(self,
+                 train_image_path=None,
+                 input_shape=(64, 64, 1),
+                 lr=0.0003,
+                 batch_size=32,
+                 latent_dim=128,
+                 iterations=100000,
+                 validation_split=0.2,
+                 view_grid_size=4,
+                 ae_burn=1000,
+                 validation_image_path='',
+                 pretrained_model_path='',
+                 checkpoint_path='checkpoints',
+                 training_view=False):
+        self.lr = lr
+        self.iterations = iterations
+        self.training_view = training_view
+        self.live_view_previous_time = time()
+        self.input_shape = input_shape
+        self.batch_size = batch_size
+        self.latent_dim = latent_dim
+        self.checkpoint_path = checkpoint_path
+        self.view_grid_size = view_grid_size
+        self.ae_burn = ae_burn
+        plt.style.use(['dark_background'])
+        plt.tight_layout(0.5)
+        self.fig, _ = plt.subplots()
+        if self.latent_dim == -1:
+            self.latent_dim = self.input_shape[0] // 32 * self.input_shape[1] // 32 * 256
+
+        self.model = Model(input_shape=input_shape, latent_dim=self.latent_dim)
+        self.encoder, self.decoder, self.vae = self.model.build()
+        # if os.path.exists(pretrained_model_path) and os.path.isfile(pretrained_model_path):
+        #     print(f'\npretrained model path : {[pretrained_model_path]}')
+        #     self.decoder = tf.keras.models.load_model(pretrained_model_path, compile=False)
+        #     print(f'input_shape : {self.input_shape}')
+
+        if validation_image_path != '':
+            self.train_image_paths, _ = self.init_image_paths(train_image_path)
+            self.validation_image_paths, _ = self.init_image_paths(validation_image_path)
+        elif validation_split > 0.0:
+            self.train_image_paths, self.validation_image_paths = self.init_image_paths(train_image_path, validation_split=validation_split)
+        self.train_data_generator = DataGenerator(
+            image_paths=self.train_image_paths,
+            input_shape=input_shape,
+            batch_size=batch_size,
+            latent_dim=self.latent_dim)
+        self.validation_data_generator = DataGenerator(
+            image_paths=self.validation_image_paths,
+            input_shape=input_shape,
+            batch_size=batch_size,
+            latent_dim=self.latent_dim)
+        self.validation_data_generator_one_batch = DataGenerator(
+            image_paths=self.validation_image_paths,
+            input_shape=input_shape,
+            batch_size=1,
+            latent_dim=self.latent_dim)
+        self.lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations)
+
+    def fit(self):
+        self.model.summary()
+        print(f'\ntrain on {len(self.train_image_paths)} samples.')
+        print(f'validate on {len(self.validation_image_paths)} samples.')
+        print('start training')
+        self.train()
+
+    @tf.function
+    def graph_forward(self, model, x):
+        return model(x, training=False)
+
+    @tf.function
+    def train_step_vae(self, model, optimizer, x, y_true):
+        def softclip(tensor, min_val):
+            return min_val + K.softplus(tensor - min_val)
+        def gaussian_nll(mu, log_sigma, x):
+            return 0.5 * K.square((x - mu) / K.exp(log_sigma)) + log_sigma + 0.5 * K.log(np.pi * 2.0)
+        with tf.GradientTape() as tape:
+            batch_size = K.cast(K.shape(x)[0], dtype=tf.float32)
+            y_pred, mu, log_var = model(x, training=True)
+            log_sigma = K.log(K.sqrt(tf.reduce_mean(K.square(y_true - y_pred))))
+            log_sigma = softclip(log_sigma, -6.0)
+            reconstruction_loss = tf.reduce_sum(gaussian_nll(y_pred, log_sigma, y_true)) / batch_size
+            kl_loss = -0.5 * (1.0 + log_var - K.square(mu) - tf.exp(log_var))
+            kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
+            loss = reconstruction_loss + kl_loss
+        gradients = tape.gradient(loss, model.trainable_variables)
+        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+        return reconstruction_loss, kl_loss
+
+    def train(self):
+        iteration_count = 0
+        optimizer = tf.keras.optimizers.Adam(lr=self.lr, beta_1=0.9)
+        os.makedirs(self.checkpoint_path, exist_ok=True)
+        while True:
+            for batch_x in self.train_data_generator:
+                iteration_count += 1
+                loss_str = f'[iteration count : {iteration_count:6d}]'
+                reconstruction_loss, kl_loss = self.train_step_vae(self.vae, optimizer, batch_x, batch_x)
+                loss_str += f' reconstruction_loss : {reconstruction_loss:.4f}, kl_loss : {kl_loss:.4f}'
+                print(loss_str)
+                if self.training_view:
+                    self.show_generated_images()
+                if iteration_count % 5000 == 0:
+                    self.decoder.save(f'{self.checkpoint_path}/decoder_{iteration_count}_iter.h5', include_optimizer=False)
+                if iteration_count == self.iterations:
+                    print('\n\ntrain end successfully')
+                    while True:
+                        key = self.show_generated_images(wait_key=0)
+                        if key == 27:
+                            exit(0)
+
+    @staticmethod
+    def init_image_paths(image_path, validation_split=0.0):
+        all_image_paths = glob(f'{image_path}/**/*.jpg', recursive=True)
+        np.random.shuffle(all_image_paths)
+        num_train_images = int(len(all_image_paths) * (1.0 - validation_split))
+        image_paths = all_image_paths[:num_train_images]
+        validation_image_paths = all_image_paths[num_train_images:]
+        return image_paths, validation_image_paths
+
+    def resize(self, img, size):
+        if img.shape[1] > size[0] or img.shape[0] > size[1]:
+            return cv2.resize(img, size, interpolation=cv2.INTER_AREA)
+        else:
+            return cv2.resize(img, size, interpolation=cv2.INTER_LINEAR)
+
+    def generate(self):
+        while True:
+            generated_image = self.generate_random_image()
+            cv2.imshow('generated image', generated_image)
+            key = cv2.waitKey(0)
+            if key == 27:
+                break
+
+    def generate_random_image(self, size=1):
+        z = np.asarray([DataGenerator.get_z_vector(size=self.latent_dim) for _ in range(size)]).astype('float32')
+        y = np.asarray(self.graph_forward(self.decoder, z))
+        y = DataGenerator.denormalize(y)
+        generated_images = np.clip(np.asarray(y).reshape((size,) + self.input_shape), 0.0, 255.0).astype('uint8')
+        return generated_images[0] if size == 1 else generated_images
+
+    def generate_latent_space_2d(self, split_size=10):
+        assert split_size > 1
+        assert self.latent_dim == 2
+        space = np.linspace(-1.0, 1.0, split_size)
+        z = []
+        for i in range(split_size):
+            for j in range(split_size):
+                z.append([space[i], space[j]])
+        z = np.asarray(z).reshape((split_size * split_size, 2)).astype('float32')
+        y = np.asarray(self.graph_forward(self.decoder, z))
+        y = DataGenerator.denormalize(y)
+        generated_images = np.clip(np.asarray(y).reshape((split_size * split_size,) + self.input_shape), 0.0, 255.0).astype('uint8')
+        return generated_images
+
+    def predict(self, img):
+        img = self.resize(img, (self.input_shape[1], self.input_shape[0]))
+        x = np.asarray(img).reshape((1,) + self.input_shape).astype('float32')
+        x = DataGenerator.normalize(x)
+        y = np.asarray(self.graph_forward(self.vae, x)[0]).reshape(self.input_shape)
+        y = DataGenerator.denormalize(y)
+        decoded_img = np.clip(y, 0.0, 255.0).astype('uint8')
+        return img, decoded_img
+
+    def predict_images(self, image_paths):
+        """
+        Equal to the evaluate function. image paths are required.
+        """
+        if type(image_paths) is str:
+            image_paths = glob(image_paths)
+        image_paths = natsort.natsorted(image_paths)
+        with tf.device('/cpu:0'):
+            for path in image_paths:
+                img = cv2.imread(path, cv2.IMREAD_GRAYSCALE if self.input_shape[-1] == 1 else cv2.IMREAD_COLOR)
+                img, output_image = self.predict(img)
+                img = self.resize(img, (self.input_shape[1], self.input_shape[0]))
+                img = np.asarray(img).reshape(img.shape[:2] + (self.input_shape[-1],))
+                cv2.imshow('ae', np.concatenate((img, output_image), axis=1))
+                key = cv2.waitKey(0)
+                if key == 27:
+                    break
+
+    def predict_train_images(self):
+        self.predict_images(self.train_image_paths)
+
+    def predict_validation_images(self):
+        self.predict_images(self.validation_image_paths)
+
+    def show_interpolation(self, frame=100):
+        space = np.linspace(-1.0, 1.0, frame)
+        for val in space:
+            z = np.zeros(shape=(1, self.latent_dim), dtype=np.float32) + val
+            y = np.asarray(self.graph_forward(self.decoder, z))[0]
+            y = DataGenerator.denormalize(y)
+            generated_image = np.clip(np.asarray(y).reshape(self.input_shape), 0.0, 255.0).astype('uint8')
+            cv2.imshow('interpolation', generated_image)
+            key = cv2.waitKey(10)
+            if key == 27:
+                break
+
+    def make_border(self, img, size=5):
+        return cv2.copyMakeBorder(img, size, size, size, size, None, value=192) 
+
+    def make_z_distribution_image(self, z):
+        plt.clf()
+        plt.hist(z, bins=self.latent_dim if self.latent_dim < 20 else 20)
+        # plt.plot(z)
+        self.fig.canvas.draw()
+        width, height = self.fig.canvas.get_width_height()
+        img = np.frombuffer(self.fig.canvas.tostring_rgb(), dtype=np.uint8).reshape((height, width, 3))
+        size = self.input_shape[0]
+        img = self.resize(img, (size, size))
+        if self.input_shape[-1] == 1:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        else:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        return img
+
+    def show_generated_images(self, wait_key=1):
+        """
+        During training, the image is forwarded in real time, showing the results are shown.
+        """
+        cur_time = time()
+        if cur_time - self.live_view_previous_time < 3.0:
+            return
+        self.live_view_previous_time = cur_time
+        img_paths = np.random.choice(self.train_image_paths, size=self.view_grid_size, replace=False)
+        win_name = 'training view'
+        input_shape = self.vae.input_shape[1:]
+
+        decoded_images_cat = None
+        for img_path in img_paths:
+            img = cv2.imdecode(np.fromfile(img_path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE if input_shape[-1] == 1 else cv2.IMREAD_COLOR)
+            img, output_image= self.predict(img)
+            img = self.resize(img, (input_shape[1], input_shape[0]))
+            img, output_image = self.make_border(img), self.make_border(output_image)
+            # z_image = self.make_border(self.make_z_distribution_image(z))
+            img = img.reshape(img.shape + (1,))
+            output_image = output_image.reshape(output_image.shape + (1,))
+            # z_image = z_image.reshape(z_image.shape + (1,))
+            # imgs = np.concatenate([img, output_image, z_image], axis=1)
+            imgs = np.concatenate([img, output_image], axis=1)
+            if decoded_images_cat is None:
+                decoded_images_cat = imgs
+            else:
+                decoded_images_cat = np.append(decoded_images_cat, imgs, axis=0)
+
+        generated_images_cat = None
+        if self.latent_dim == 2:
+            generated_images = self.generate_latent_space_2d(split_size=self.view_grid_size)
+        else:
+            generated_images = self.generate_random_image(size=self.view_grid_size * self.view_grid_size)
+        for i in range(self.view_grid_size):
+            line = None
+            for j in range(self.view_grid_size):
+                generated_image = self.make_border(generated_images[i * self.view_grid_size + j])
+                if line is None:
+                    line = generated_image
+                else:
+                    line = np.append(line, generated_image, axis=1)
+            if generated_images_cat is None:
+                generated_images_cat = line
+            else:
+                generated_images_cat = np.append(generated_images_cat, line, axis=0)
+        # self.show_interpolation()
+        cv2.imshow('decoded_images', decoded_images_cat)
+        cv2.imshow('generated_images', generated_images_cat)
+        return cv2.waitKey(wait_key)
