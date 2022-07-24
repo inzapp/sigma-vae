@@ -102,25 +102,6 @@ class VariationalAutoEncoder:
     def graph_forward(self, model, x):
         return model(x, training=False)
 
-    # @tf.function
-    # def train_step_vae(self, model, optimizer, x, y_true):
-    #     def softclip(tensor, min_val):
-    #         return min_val + K.softplus(tensor - min_val)
-    #     def gaussian_nll(mu, log_sigma, x):
-    #         return 0.5 * K.square((x - mu) / K.exp(log_sigma)) + log_sigma + 0.5 * K.log(np.pi * 2.0)
-    #     with tf.GradientTape() as tape:
-    #         batch_size = K.cast(K.shape(x)[0], dtype=tf.float32)
-    #         y_pred, mu, log_var = model(x, training=True)
-    #         log_sigma = K.log(K.sqrt(tf.reduce_mean(K.square(y_true - y_pred))))
-    #         log_sigma = softclip(log_sigma, -6.0)
-    #         reconstruction_loss = tf.reduce_sum(gaussian_nll(y_pred, log_sigma, y_true)) / batch_size
-    #         kl_loss = -0.5 * (1.0 + log_var - K.square(mu) - tf.exp(log_var))
-    #         kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
-    #         loss = reconstruction_loss + kl_loss
-    #     gradients = tape.gradient(loss, model.trainable_variables)
-    #     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-    #     return reconstruction_loss, kl_loss
-
     @tf.function
     def train_step_vae(self, model, optimizer, x, y_true):
         with tf.GradientTape() as tape:
