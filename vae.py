@@ -91,16 +91,13 @@ class VariationalAutoEncoder:
             latent_dim=self.latent_dim)
         self.lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations)
 
-    def fit(self):
-        self.model.summary()
-        print(f'\ntrain on {len(self.train_image_paths)} samples.')
-        print(f'validate on {len(self.validation_image_paths)} samples.')
-        print('start training')
-        self.train()
-
-    @tf.function
-    def graph_forward(self, model, x):
-        return model(x, training=False)
+    def init_image_paths(self, image_path, validation_split=0.0):
+        all_image_paths = glob(f'{image_path}/**/*.jpg', recursive=True)
+        np.random.shuffle(all_image_paths)
+        num_train_images = int(len(all_image_paths) * (1.0 - validation_split))
+        image_paths = all_image_paths[:num_train_images]
+        validation_image_paths = all_image_paths[num_train_images:]
+        return image_paths, validation_image_paths
 
     @tf.function
     def train_step_vae(self, model, optimizer, x, y_true):
@@ -115,7 +112,11 @@ class VariationalAutoEncoder:
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         return reconstruction_loss, kl_loss
 
-    def train(self):
+    def fit(self):
+        self.model.summary()
+        print(f'\ntrain on {len(self.train_image_paths)} samples.')
+        print(f'validate on {len(self.validation_image_paths)} samples.')
+        print('start training')
         iteration_count = 0
         optimizer = tf.keras.optimizers.Adam(lr=self.lr)
         os.makedirs(self.checkpoint_path, exist_ok=True)
@@ -144,22 +145,9 @@ class VariationalAutoEncoder:
                         if key == 27:
                             exit(0)
 
-    @staticmethod
-    def init_image_paths(image_path, validation_split=0.0):
-        all_image_paths = glob(f'{image_path}/**/*.jpg', recursive=True)
-        np.random.shuffle(all_image_paths)
-        num_train_images = int(len(all_image_paths) * (1.0 - validation_split))
-        image_paths = all_image_paths[:num_train_images]
-        validation_image_paths = all_image_paths[num_train_images:]
-        return image_paths, validation_image_paths
-
-    def show_generated_images(self):
-        while True:
-            generated_images = self.get_generated_images()
-            cv2.imshow('generated_images', generated_images)
-            key = cv2.waitKey(0)
-            if key == 27:
-                break
+    @tf.function
+    def graph_forward(self, model, x):
+        return model(x, training=False)
 
     def generate_random_image(self, size=1):
         z = np.asarray([DataGenerator.get_z_vector(size=self.latent_dim) for _ in range(size)]).astype('float32')
@@ -190,24 +178,6 @@ class VariationalAutoEncoder:
         y = DataGenerator.denormalize(y)
         decoded_img = np.clip(y, 0.0, 255.0).astype('uint8')
         return img, decoded_img
-
-    def predict_images(self, image_paths):
-        """
-        Equal to the evaluate function. image paths are required.
-        """
-        if type(image_paths) is str:
-            image_paths = glob(image_paths)
-        image_paths = natsort.natsorted(image_paths)
-        with tf.device('/cpu:0'):
-            for path in image_paths:
-                img = cv2.imread(path, cv2.IMREAD_GRAYSCALE if self.input_shape[-1] == 1 else cv2.IMREAD_COLOR)
-                img, output_image = self.predict(img)
-                img = DataGenerator.resize(img, (self.input_shape[1], self.input_shape[0]))
-                img = np.asarray(img).reshape(img.shape[:2] + (self.input_shape[-1],))
-                cv2.imshow('ae', np.concatenate((img, output_image), axis=1))
-                key = cv2.waitKey(0)
-                if key == 27:
-                    break
 
     def show_interpolation(self, frame=100):
         space = np.linspace(-1.0, 1.0, frame)
@@ -271,3 +241,12 @@ class VariationalAutoEncoder:
             else:
                 generated_images_cat = np.append(generated_images_cat, line, axis=0)
         return generated_images_cat
+
+    def show_generated_images(self):
+        while True:
+            generated_images = self.get_generated_images()
+            cv2.imshow('generated_images', generated_images)
+            key = cv2.waitKey(0)
+            if key == 27:
+                break
+
