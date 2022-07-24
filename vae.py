@@ -96,16 +96,19 @@ class VariationalAutoEncoder:
         return image_paths, validation_image_paths
 
     @tf.function
-    def train_step_vae(self, model, optimizer, x, y_true):
+    def compute_gradient(self, model, optimizer, x, y_true):
         with tf.GradientTape() as tape:
             y_pred, mu, log_var = model(x, training=True)
-            reconstruction_loss = tf.reduce_sum(tf.reduce_mean(tf.square(y_true - y_pred), axis=0))
-            kl_loss = -0.5 * (1.0 + log_var - tf.square(mu) - tf.exp(log_var))
-            kl_loss = tf.reduce_sum(tf.reduce_mean(kl_loss, axis=0))
+            reconstruction_square = tf.square(y_true - y_pred)
+            reconstruction_loss = tf.reduce_sum(tf.reduce_mean(tf.reduce_mean(reconstruction_square, axis=0), axis=-1))
+            reconstruction_loss_mean = tf.reduce_mean(reconstruction_square)
+            kl_divergence = -0.5 * (1.0 + log_var - tf.square(mu) - tf.exp(log_var))
+            kl_loss = tf.reduce_sum(tf.reduce_mean(kl_divergence, axis=0))
+            kl_loss_mean = tf.reduce_mean(kl_divergence)
             loss = reconstruction_loss + kl_loss
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        return reconstruction_loss, kl_loss
+        return reconstruction_loss_mean, kl_loss_mean
 
     def fit(self):
         self.model.summary()
@@ -118,7 +121,7 @@ class VariationalAutoEncoder:
         while True:
             for batch_x in self.train_data_generator:
                 self.lr_scheduler.schedule_one_cycle(optimizer, iteration_count)
-                reconstruction_loss, kl_loss = self.train_step_vae(self.vae, optimizer, batch_x, batch_x)
+                reconstruction_loss, kl_loss = self.compute_gradient(self.vae, optimizer, batch_x, batch_x)
                 iteration_count += 1
                 print(f'[iteration count : {iteration_count:6d}] reconstruction_loss : {reconstruction_loss:.4f}, kl_loss : {kl_loss:.4f}')
                 if self.training_view:
