@@ -53,7 +53,6 @@ class Model:
         x = self.conv2d(x, 128, 3, 2, activation='relu')
         x = self.conv2d(x, 256, 3, 2, activation='relu')
         x = self.flatten(x)
-        x = self.dense(x, 4096, activation='relu')
         mu = self.dense(x, self.latent_dim, activation='linear')
         log_var = self.dense(x, self.latent_dim, activation='linear')
         z = self.sampling(mu, log_var)
@@ -66,7 +65,6 @@ class Model:
 
         decoder_input = tf.keras.layers.Input(shape=(self.latent_dim,))
         x = decoder_input
-        x = self.dense(x, 4096, activation='relu')
         x = self.dense(x, target_rows * target_cols * target_channels, activation='relu')
         x = self.reshape(x, (target_rows, target_cols, target_channels))
         x = self.conv2d_transpose(x, 256, 3, 2, activation='relu')
