@@ -129,7 +129,7 @@ class VariationalAutoEncoder:
             reconstruction_loss = tf.reduce_sum(tf.square(y_true - y_pred)) / batch_size
             kl_loss = -0.5 * (1.0 + log_var - K.square(mu) - tf.exp(log_var))
             kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
-            loss = reconstruction_loss + (kl_loss * 1.0)
+            loss = reconstruction_loss + kl_loss
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         return reconstruction_loss, kl_loss
@@ -146,12 +146,13 @@ class VariationalAutoEncoder:
                 loss_str = f'[iteration count : {iteration_count:6d}] reconstruction_loss : {reconstruction_loss:.4f}, kl_loss : {kl_loss:.4f}'
                 print(loss_str)
                 if self.training_view:
-                    self.show_generated_images()
+                    self.training_view_function()
                 if iteration_count % 5000 == 0:
                     self.decoder.save(f'{self.checkpoint_path}/decoder_{iteration_count}_iter.h5', include_optimizer=False)
                 if iteration_count == self.iterations:
                     print('\n\ntrain end successfully')
                     while True:
+                        self.show_decoded_images(wait_key=1)
                         key = self.show_generated_images(wait_key=0)
                         if key == 27:
                             exit(0)
@@ -227,12 +228,6 @@ class VariationalAutoEncoder:
                 if key == 27:
                     break
 
-    def predict_train_images(self):
-        self.predict_images(self.train_image_paths)
-
-    def predict_validation_images(self):
-        self.predict_images(self.validation_image_paths)
-
     def show_interpolation(self, frame=100):
         space = np.linspace(-1.0, 1.0, frame)
         for val in space:
@@ -248,50 +243,33 @@ class VariationalAutoEncoder:
     def make_border(self, img, size=5):
         return cv2.copyMakeBorder(img, size, size, size, size, None, value=192) 
 
-    def make_z_distribution_image(self, z):
-        plt.clf()
-        plt.hist(z, bins=self.latent_dim if self.latent_dim < 20 else 20)
-        # plt.plot(z)
-        self.fig.canvas.draw()
-        width, height = self.fig.canvas.get_width_height()
-        img = np.frombuffer(self.fig.canvas.tostring_rgb(), dtype=np.uint8).reshape((height, width, 3))
-        size = self.input_shape[0]
-        img = self.resize(img, (size, size))
-        if self.input_shape[-1] == 1:
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        else:
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        return img
-
-    def show_generated_images(self, wait_key=1):
-        """
-        During training, the image is forwarded in real time, showing the results are shown.
-        """
+    def training_view_function(self):
         cur_time = time()
-        if cur_time - self.live_view_previous_time < 3.0:
-            return
-        self.live_view_previous_time = cur_time
-        img_paths = np.random.choice(self.train_image_paths, size=self.view_grid_size, replace=False)
-        win_name = 'training view'
-        input_shape = self.vae.input_shape[1:]
+        if cur_time - self.live_view_previous_time > 3.0:
+            self.show_decoded_images()
+            self.show_generated_images()
+            self.live_view_previous_time = cur_time
 
+    def show_decoded_images(self, wait_key=1):
+        img_paths = np.random.choice(self.train_image_paths, size=self.view_grid_size, replace=False)
+        input_shape = self.vae.input_shape[1:]
         decoded_images_cat = None
         for img_path in img_paths:
             img = cv2.imdecode(np.fromfile(img_path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE if input_shape[-1] == 1 else cv2.IMREAD_COLOR)
             img, output_image= self.predict(img)
             img = self.resize(img, (input_shape[1], input_shape[0]))
             img, output_image = self.make_border(img), self.make_border(output_image)
-            # z_image = self.make_border(self.make_z_distribution_image(z))
             img = img.reshape(img.shape + (1,))
             output_image = output_image.reshape(output_image.shape + (1,))
-            # z_image = z_image.reshape(z_image.shape + (1,))
-            # imgs = np.concatenate([img, output_image, z_image], axis=1)
             imgs = np.concatenate([img, output_image], axis=1)
             if decoded_images_cat is None:
                 decoded_images_cat = imgs
             else:
                 decoded_images_cat = np.append(decoded_images_cat, imgs, axis=0)
+        cv2.imshow('decoded_images', decoded_images_cat)
+        return cv2.waitKey(wait_key)
 
+    def show_generated_images(self, wait_key=1):
         generated_images_cat = None
         if self.latent_dim == 2:
             generated_images = self.generate_latent_space_2d(split_size=self.view_grid_size)
@@ -310,6 +288,5 @@ class VariationalAutoEncoder:
             else:
                 generated_images_cat = np.append(generated_images_cat, line, axis=0)
         # self.show_interpolation()
-        cv2.imshow('decoded_images', decoded_images_cat)
         cv2.imshow('generated_images', generated_images_cat)
         return cv2.waitKey(wait_key)
