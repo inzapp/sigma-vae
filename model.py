@@ -47,15 +47,15 @@ class Model:
     def build_encoder(self):
         encoder_input = tf.keras.layers.Input(shape=self.input_shape)
         x = encoder_input
-        x = self.conv2d(x, 16,  3, 2, activation='relu', bn=True)
-        x = self.conv2d(x, 32,  3, 2, activation='relu', bn=True)
-        x = self.conv2d(x, 64,  3, 2, activation='relu', bn=True)
-        x = self.conv2d(x, 128, 3, 2, activation='relu', bn=True)
-        x = self.conv2d(x, 256, 3, 2, activation='relu', bn=True)
+        x = self.conv2d(x, 16,  3, 2, activation='relu')
+        x = self.conv2d(x, 32,  3, 2, activation='relu')
+        x = self.conv2d(x, 64,  3, 2, activation='relu')
+        x = self.conv2d(x, 128, 3, 2, activation='relu')
+        x = self.conv2d(x, 256, 3, 2, activation='relu')
         x = self.flatten(x)
-        x = self.dense(x, 4096, activation='relu', bn=True)
-        mu = self.dense(x, self.latent_dim, activation='linear', bn=True)
-        log_var = self.dense(x, self.latent_dim, activation='linear', bn=True)
+        x = self.dense(x, 4096, activation='relu')
+        mu = self.dense(x, self.latent_dim, activation='linear')
+        log_var = self.dense(x, self.latent_dim, activation='linear')
         z = self.sampling(mu, log_var)
         return encoder_input, [z, mu, log_var]
 
@@ -66,14 +66,14 @@ class Model:
 
         decoder_input = tf.keras.layers.Input(shape=(self.latent_dim,))
         x = decoder_input
-        x = self.dense(x, 4096, activation='relu', bn=True)
-        x = self.dense(x, target_rows * target_cols * target_channels, activation='relu', bn=True)
+        x = self.dense(x, 4096, activation='relu')
+        x = self.dense(x, target_rows * target_cols * target_channels, activation='relu')
         x = self.reshape(x, (target_rows, target_cols, target_channels))
-        x = self.conv2d_transpose(x, 256, 3, 2, activation='relu', bn=True)
-        x = self.conv2d_transpose(x, 128, 3, 2, activation='relu', bn=True)
-        x = self.conv2d_transpose(x, 64,  3, 2, activation='relu', bn=True)
-        x = self.conv2d_transpose(x, 32,  3, 2, activation='relu', bn=True)
-        x = self.conv2d_transpose(x, 16,  3, 2, activation='relu', bn=True)
+        x = self.conv2d_transpose(x, 256, 3, 2, activation='relu')
+        x = self.conv2d_transpose(x, 128, 3, 2, activation='relu')
+        x = self.conv2d_transpose(x, 64,  3, 2, activation='relu')
+        x = self.conv2d_transpose(x, 32,  3, 2, activation='relu')
+        x = self.conv2d_transpose(x, 16,  3, 2, activation='relu')
         decoder_output = self.conv2d_transpose(x, self.input_shape[-1], 1, 1, activation='sigmoid')
         return decoder_input, decoder_output
 
@@ -86,7 +86,7 @@ class Model:
             return mu + K.exp(log_var * 0.5) * epsilon
         return tf.keras.layers.Lambda(function=function)([mu, log_var])
 
-    def conv2d(self, x, filters, kernel_size, strides=1, bn=True, activation='relu', alpha=0.2):
+    def conv2d(self, x, filters, kernel_size, strides=1, bn=False, activation='relu', alpha=0.2):
         x = tf.keras.layers.Conv2D(
             strides=strides,
             filters=filters,
@@ -98,7 +98,7 @@ class Model:
             x = tf.keras.layers.BatchNormalization()(x)
         return self.activation(x, activation)
 
-    def conv2d_transpose(self, x, filters, kernel_size, strides=1, bn=True, activation='relu', alpha=0.2):
+    def conv2d_transpose(self, x, filters, kernel_size, strides=1, bn=False, activation='relu', alpha=0.2):
         x = tf.keras.layers.Conv2DTranspose(
             strides=strides,
             filters=filters,
@@ -110,7 +110,7 @@ class Model:
             x = tf.keras.layers.BatchNormalization()(x)
         return self.activation(x, activation)
 
-    def dense(self, x, units, bn=True, activation='relu', alpha=0.2):
+    def dense(self, x, units, bn=False, activation='relu', alpha=0.2):
         x = tf.keras.layers.Dense(
             units=units,
             use_bias=False if bn else True,
