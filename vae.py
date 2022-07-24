@@ -45,6 +45,7 @@ class VariationalAutoEncoder:
                  pretrained_model_path='',
                  checkpoint_path='checkpoints',
                  training_view=False):
+        assert input_shape[-1] in [1, 3]
         self.lr = lr
         self.iterations = iterations
         self.training_view = training_view
