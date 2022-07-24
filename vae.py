@@ -186,7 +186,7 @@ class VariationalAutoEncoder:
                 break
 
     def make_border(self, img, size=5):
-        return cv2.copyMakeBorder(img, size, size, size, size, None, value=192) 
+        return cv2.copyMakeBorder(img, size, size, size, size, None, value=(192, 192, 192)) 
 
     def training_view_function(self):
         cur_time = time()
@@ -207,8 +207,9 @@ class VariationalAutoEncoder:
             img, output_image= self.predict(img)
             img = DataGenerator.resize(img, (input_shape[1], input_shape[0]))
             img, output_image = self.make_border(img), self.make_border(output_image)
-            img = img.reshape(img.shape + (1,))
-            output_image = output_image.reshape(output_image.shape + (1,))
+            if self.input_shape[-1] == 1:
+                img = img.reshape(img.shape + (1,))
+                output_image = output_image.reshape(output_image.shape + (1,))
             imgs = np.concatenate([img, output_image], axis=1)
             if decoded_images_cat is None:
                 decoded_images_cat = imgs
