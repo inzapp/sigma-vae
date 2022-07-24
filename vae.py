@@ -63,7 +63,7 @@ class VariationalAutoEncoder:
             self.latent_dim = self.input_shape[0] // 32 * self.input_shape[1] // 32 * 256
 
         self.model = Model(input_shape=input_shape, latent_dim=self.latent_dim)
-        self.encoder, self.decoder, self.vae = self.model.build()
+        self.vae, self.decoder = self.model.build()
         # if os.path.exists(pretrained_model_path) and os.path.isfile(pretrained_model_path):
         #     print(f'\npretrained model path : {[pretrained_model_path]}')
         #     self.decoder = tf.keras.models.load_model(pretrained_model_path, compile=False)

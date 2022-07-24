@@ -31,20 +31,20 @@ class Model:
         self.input_shape = input_shape
         self.latent_dim = latent_dim
         self.vae = None
+        self.decoder = None
 
     def build(self):
         assert self.input_shape[0] % 32 == 0
         assert self.input_shape[1] % 32 == 0
-        encoder_input, encoder_output = self.build_encoder_fcn()
-        decoder_input, decoder_output = self.build_decoder_fcn()
+        encoder_input, encoder_output = self.build_encoder()
+        decoder_input, decoder_output = self.build_decoder()
         z, mu, log_var = encoder_output
-        encoder = tf.keras.models.Model(encoder_input, [z, mu, log_var])
-        decoder = tf.keras.models.Model(decoder_input, decoder_output)
-        vae_output = decoder(z)
+        self.decoder = tf.keras.models.Model(decoder_input, decoder_output)
+        vae_output = self.decoder(z)
         self.vae = tf.keras.models.Model(encoder_input, [vae_output, mu, log_var])
-        return encoder, decoder, self.vae
+        return self.vae, self.decoder
 
-    def build_encoder_fcn(self):
+    def build_encoder(self):
         encoder_input = tf.keras.layers.Input(shape=self.input_shape)
         x = encoder_input
         x = self.conv2d(x, 16,  3, 2, activation='relu', bn=True)
@@ -53,21 +53,19 @@ class Model:
         x = self.conv2d(x, 128, 3, 2, activation='relu', bn=True)
         x = self.conv2d(x, 256, 3, 2, activation='relu', bn=True)
         x = self.flatten(x)
-        # x = self.dense(x, 4096, activation='relu', bn=True)
         x = self.dense(x, 4096, activation='relu', bn=True)
         mu = self.dense(x, self.latent_dim, activation='linear', bn=True)
         log_var = self.dense(x, self.latent_dim, activation='linear', bn=True)
         z = self.sampling(mu, log_var)
         return encoder_input, [z, mu, log_var]
 
-    def build_decoder_fcn(self):
+    def build_decoder(self):
         target_rows = self.input_shape[0] // 32
         target_cols = self.input_shape[1] // 32
         target_channels = 256
 
         decoder_input = tf.keras.layers.Input(shape=(self.latent_dim,))
         x = decoder_input
-        # x = self.dense(x, 4096, activation='relu', bn=True)
         x = self.dense(x, 4096, activation='relu', bn=True)
         x = self.dense(x, target_rows * target_cols * target_channels, activation='relu', bn=True)
         x = self.reshape(x, (target_rows, target_cols, target_channels))
@@ -135,5 +133,7 @@ class Model:
         return tf.keras.layers.Flatten()(x)
 
     def summary(self):
+        self.decoder.summary()
+        print()
         self.vae.summary()
 
