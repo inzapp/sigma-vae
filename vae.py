@@ -21,7 +21,6 @@ import os
 import natsort
 import numpy as np
 import tensorflow as tf
-import matplotlib.pyplot as plt
 
 from cv2 import cv2
 from glob import glob
@@ -36,9 +35,9 @@ class VariationalAutoEncoder:
     def __init__(self,
                  train_image_path=None,
                  input_shape=(64, 64, 1),
-                 lr=0.0003,
+                 lr=0.001,
                  batch_size=32,
-                 latent_dim=128,
+                 latent_dim=32,
                  iterations=100000,
                  validation_split=0.2,
                  view_grid_size=4,
@@ -55,9 +54,6 @@ class VariationalAutoEncoder:
         self.latent_dim = latent_dim
         self.checkpoint_path = checkpoint_path
         self.view_grid_size = view_grid_size
-        plt.style.use(['dark_background'])
-        plt.tight_layout(0.5)
-        self.fig, _ = plt.subplots()
         if self.latent_dim == -1:
             self.latent_dim = self.input_shape[0] // 32 * self.input_shape[1] // 32 * 256
 
