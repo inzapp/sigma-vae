@@ -21,7 +21,6 @@ import os
 import natsort
 import numpy as np
 import tensorflow as tf
-import tensorflow.keras.backend as K
 import matplotlib.pyplot as plt
 
 from cv2 import cv2
@@ -102,11 +101,10 @@ class VariationalAutoEncoder:
     @tf.function
     def train_step_vae(self, model, optimizer, x, y_true):
         with tf.GradientTape() as tape:
-            batch_size = K.cast(K.shape(x)[0], dtype=tf.float32)
             y_pred, mu, log_var = model(x, training=True)
-            reconstruction_loss = tf.reduce_sum(tf.square(y_true - y_pred)) / batch_size
-            kl_loss = -0.5 * (1.0 + log_var - K.square(mu) - tf.exp(log_var))
-            kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
+            reconstruction_loss = tf.reduce_sum(tf.reduce_mean(tf.square(y_true - y_pred), axis=0))
+            kl_loss = -0.5 * (1.0 + log_var - tf.square(mu) - tf.exp(log_var))
+            kl_loss = tf.reduce_sum(tf.reduce_mean(kl_loss, axis=0))
             loss = reconstruction_loss + kl_loss
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
