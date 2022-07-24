@@ -117,24 +117,30 @@ class VariationalAutoEncoder:
 
     def train(self):
         iteration_count = 0
-        optimizer = tf.keras.optimizers.Adam(lr=self.lr, beta_1=0.9)
+        optimizer = tf.keras.optimizers.Adam(lr=self.lr)
         os.makedirs(self.checkpoint_path, exist_ok=True)
         while True:
             for batch_x in self.train_data_generator:
-                self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
+                self.lr_scheduler.schedule_one_cycle(optimizer, iteration_count)
                 reconstruction_loss, kl_loss = self.train_step_vae(self.vae, optimizer, batch_x, batch_x)
                 iteration_count += 1
                 loss_str = f'[iteration count : {iteration_count:6d}] reconstruction_loss : {reconstruction_loss:.4f}, kl_loss : {kl_loss:.4f}'
                 print(loss_str)
                 if self.training_view:
                     self.training_view_function()
-                if iteration_count % 5000 == 0:
-                    self.decoder.save(f'{self.checkpoint_path}/decoder_{iteration_count}_iter.h5', include_optimizer=False)
+                if iteration_count % 1000 == 0:
+                    model_path_without_extention = f'{self.checkpoint_path}/decoder_{iteration_count}_iter' 
+                    self.decoder.save(f'{model_path_without_extention}.h5', include_optimizer=False)
+                    generated_images = self.get_generated_images()
+                    cv2.imwrite(f'{model_path_without_extention}.jpg', generated_images)
                 if iteration_count == self.iterations:
                     print('\n\ntrain end successfully')
                     while True:
-                        self.show_decoded_images(wait_key=1)
-                        key = self.show_generated_images(wait_key=0)
+                        decoded_images = self.get_decoded_images()
+                        generated_images = self.get_generated_images()
+                        cv2.imshow('decoded_images', decoded_images)
+                        cv2.imshow('generated_images', generated_images)
+                        key = cv2.waitKey(0)
                         if key == 27:
                             exit(0)
 
@@ -153,10 +159,10 @@ class VariationalAutoEncoder:
         else:
             return cv2.resize(img, size, interpolation=cv2.INTER_LINEAR)
 
-    def generate(self):
+    def show_generated_images(self):
         while True:
-            generated_image = self.generate_random_image()
-            cv2.imshow('generated image', generated_image)
+            generated_images = self.get_generated_images()
+            cv2.imshow('generated_images', generated_images)
             key = cv2.waitKey(0)
             if key == 27:
                 break
@@ -227,11 +233,14 @@ class VariationalAutoEncoder:
     def training_view_function(self):
         cur_time = time()
         if cur_time - self.live_view_previous_time > 3.0:
-            self.show_decoded_images()
-            self.show_generated_images()
+            decoded_images = self.get_decoded_images()
+            generated_images = self.get_generated_images()
+            cv2.imshow('decoded_images', decoded_images)
+            cv2.imshow('generated_images', generated_images)
+            cv2.waitKey(1)
             self.live_view_previous_time = cur_time
 
-    def show_decoded_images(self, wait_key=1):
+    def get_decoded_images(self):
         img_paths = np.random.choice(self.train_image_paths, size=self.view_grid_size, replace=False)
         input_shape = self.vae.input_shape[1:]
         decoded_images_cat = None
@@ -247,10 +256,9 @@ class VariationalAutoEncoder:
                 decoded_images_cat = imgs
             else:
                 decoded_images_cat = np.append(decoded_images_cat, imgs, axis=0)
-        cv2.imshow('decoded_images', decoded_images_cat)
-        return cv2.waitKey(wait_key)
+        return decoded_images_cat
 
-    def show_generated_images(self, wait_key=1):
+    def get_generated_images(self):
         generated_images_cat = None
         if self.latent_dim == 2:
             generated_images = self.generate_latent_space_2d(split_size=self.view_grid_size)
@@ -268,6 +276,4 @@ class VariationalAutoEncoder:
                 generated_images_cat = line
             else:
                 generated_images_cat = np.append(generated_images_cat, line, axis=0)
-        # self.show_interpolation()
-        cv2.imshow('generated_images', generated_images_cat)
-        return cv2.waitKey(wait_key)
+        return generated_images_cat
