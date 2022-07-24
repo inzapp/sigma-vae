@@ -125,8 +125,7 @@ class VariationalAutoEncoder:
                 self.lr_scheduler.schedule_one_cycle(optimizer, iteration_count)
                 reconstruction_loss, kl_loss = self.train_step_vae(self.vae, optimizer, batch_x, batch_x)
                 iteration_count += 1
-                loss_str = f'[iteration count : {iteration_count:6d}] reconstruction_loss : {reconstruction_loss:.4f}, kl_loss : {kl_loss:.4f}'
-                print(loss_str)
+                print(f'[iteration count : {iteration_count:6d}] reconstruction_loss : {reconstruction_loss:.4f}, kl_loss : {kl_loss:.4f}')
                 if self.training_view:
                     self.training_view_function()
                 if iteration_count % 1000 == 0:
@@ -134,6 +133,7 @@ class VariationalAutoEncoder:
                     self.decoder.save(f'{model_path_without_extention}.h5', include_optimizer=False)
                     generated_images = self.get_generated_images(grid_size=25)
                     cv2.imwrite(f'{model_path_without_extention}.jpg', generated_images)
+                    print(f'[iteration count : {iteration_count:6d}] model with generated images saved with {model_path_without_extention} h5 and jpg\n')
                 if iteration_count == self.iterations:
                     print('\n\ntrain end successfully')
                     while True:
