@@ -132,13 +132,13 @@ class VariationalAutoEncoder:
                 if iteration_count % 1000 == 0:
                     model_path_without_extention = f'{self.checkpoint_path}/decoder_{iteration_count}_iter' 
                     self.decoder.save(f'{model_path_without_extention}.h5', include_optimizer=False)
-                    generated_images = self.get_generated_images()
+                    generated_images = self.get_generated_images(grid_size=25)
                     cv2.imwrite(f'{model_path_without_extention}.jpg', generated_images)
                 if iteration_count == self.iterations:
                     print('\n\ntrain end successfully')
                     while True:
                         decoded_images = self.get_decoded_images()
-                        generated_images = self.get_generated_images()
+                        generated_images = self.get_generated_images(grid_size=self.view_grid_size)
                         cv2.imshow('decoded_images', decoded_images)
                         cv2.imshow('generated_images', generated_images)
                         key = cv2.waitKey(0)
@@ -198,7 +198,7 @@ class VariationalAutoEncoder:
         cur_time = time()
         if cur_time - self.live_view_previous_time > 3.0:
             decoded_images = self.get_decoded_images()
-            generated_images = self.get_generated_images()
+            generated_images = self.get_generated_images(grid_size=self.view_grid_size)
             cv2.imshow('decoded_images', decoded_images)
             cv2.imshow('generated_images', generated_images)
             cv2.waitKey(1)
@@ -222,16 +222,16 @@ class VariationalAutoEncoder:
                 decoded_images_cat = np.append(decoded_images_cat, imgs, axis=0)
         return decoded_images_cat
 
-    def get_generated_images(self):
+    def get_generated_images(self, grid_size):
         generated_images_cat = None
         if self.latent_dim == 2:
-            generated_images = self.generate_latent_space_2d(split_size=self.view_grid_size)
+            generated_images = self.generate_latent_space_2d(split_size=grid_size)
         else:
-            generated_images = self.generate_random_image(size=self.view_grid_size * self.view_grid_size)
-        for i in range(self.view_grid_size):
+            generated_images = self.generate_random_image(size=grid_size * grid_size)
+        for i in range(grid_size):
             line = None
-            for j in range(self.view_grid_size):
-                generated_image = self.make_border(generated_images[i * self.view_grid_size + j])
+            for j in range(grid_size):
+                generated_image = self.make_border(generated_images[i * grid_size + j])
                 if line is None:
                     line = generated_image
                 else:
@@ -244,7 +244,7 @@ class VariationalAutoEncoder:
 
     def show_generated_images(self):
         while True:
-            generated_images = self.get_generated_images()
+            generated_images = self.get_generated_images(grid_size=self.view_grid_size)
             cv2.imshow('generated_images', generated_images)
             key = cv2.waitKey(0)
             if key == 27:
