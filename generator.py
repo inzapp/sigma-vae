@@ -29,16 +29,16 @@ class DataGenerator(tf.keras.utils.Sequence):
                  image_paths,
                  input_shape,
                  batch_size,
-                 latent_dim,
-                 vanilla_vae=False):
+                 latent_dim):
         self.image_paths = image_paths
         self.input_shape = input_shape
         self.batch_size = batch_size
         self.latent_dim = latent_dim
-        self.half_batch_size = batch_size // 2
         self.pool = ThreadPoolExecutor(8)
-        self.vanilla_vae = vanilla_vae
         self.img_index = 0
+
+    def __len__(self):
+        return int(np.floor(len(self.image_paths) / self.batch_size))
 
     def __getitem__(self, index):
         fs = []
@@ -47,15 +47,22 @@ class DataGenerator(tf.keras.utils.Sequence):
         batch_x = []
         for f in fs:
             img = f.result()
-            img = cv2.resize(img, (self.input_shape[1], self.input_shape[0]))
+            img = self.resize(img, (self.input_shape[1], self.input_shape[0]))
             x = np.asarray(img).reshape(self.input_shape)
             batch_x.append(x)
         batch_x = self.normalize(np.asarray(batch_x).reshape((self.batch_size,) + self.input_shape).astype('float32'))
         return batch_x
 
-    @tf.function
-    def graph_forward(self, model, x):
-        return model(x, training=False)
+    def next_image_path(self):
+        path = self.image_paths[self.img_index]
+        self.img_index += 1
+        if self.img_index == len(self.image_paths):
+            self.img_index = 0
+            np.random.shuffle(self.image_paths)
+        return path
+
+    def load_image(self, image_path):
+        return cv2.imdecode(np.fromfile(image_path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE if self.input_shape[-1] == 1 else cv2.IMREAD_COLOR)
 
     @staticmethod
     def normalize(x):
@@ -69,17 +76,10 @@ class DataGenerator(tf.keras.utils.Sequence):
     def get_z_vector(size):
         return np.random.normal(loc=0.0, scale=1.0, size=size)
 
-    def next_image_path(self):
-        path = self.image_paths[self.img_index]
-        self.img_index += 1
-        if self.img_index == len(self.image_paths):
-            self.img_index = 0
-            np.random.shuffle(self.image_paths)
-        return path
-
-    def __len__(self):
-        return int(np.floor(len(self.image_paths) / self.batch_size))
-
-    def load_image(self, image_path):
-        return cv2.imdecode(np.fromfile(image_path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE if self.input_shape[-1] == 1 else cv2.IMREAD_COLOR)
+    @staticmethod
+    def resize(img, size):
+        if img.shape[1] > size[0] or img.shape[0] > size[1]:
+            return cv2.resize(img, size, interpolation=cv2.INTER_AREA)
+        else:
+            return cv2.resize(img, size, interpolation=cv2.INTER_LINEAR)
 

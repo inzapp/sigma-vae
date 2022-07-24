@@ -153,12 +153,6 @@ class VariationalAutoEncoder:
         validation_image_paths = all_image_paths[num_train_images:]
         return image_paths, validation_image_paths
 
-    def resize(self, img, size):
-        if img.shape[1] > size[0] or img.shape[0] > size[1]:
-            return cv2.resize(img, size, interpolation=cv2.INTER_AREA)
-        else:
-            return cv2.resize(img, size, interpolation=cv2.INTER_LINEAR)
-
     def show_generated_images(self):
         while True:
             generated_images = self.get_generated_images()
@@ -189,7 +183,7 @@ class VariationalAutoEncoder:
         return generated_images
 
     def predict(self, img):
-        img = self.resize(img, (self.input_shape[1], self.input_shape[0]))
+        img = DataGenerator.resize(img, (self.input_shape[1], self.input_shape[0]))
         x = np.asarray(img).reshape((1,) + self.input_shape).astype('float32')
         x = DataGenerator.normalize(x)
         y = np.asarray(self.graph_forward(self.vae, x)[0]).reshape(self.input_shape)
@@ -208,7 +202,7 @@ class VariationalAutoEncoder:
             for path in image_paths:
                 img = cv2.imread(path, cv2.IMREAD_GRAYSCALE if self.input_shape[-1] == 1 else cv2.IMREAD_COLOR)
                 img, output_image = self.predict(img)
-                img = self.resize(img, (self.input_shape[1], self.input_shape[0]))
+                img = DataGenerator.resize(img, (self.input_shape[1], self.input_shape[0]))
                 img = np.asarray(img).reshape(img.shape[:2] + (self.input_shape[-1],))
                 cv2.imshow('ae', np.concatenate((img, output_image), axis=1))
                 key = cv2.waitKey(0)
@@ -247,7 +241,7 @@ class VariationalAutoEncoder:
         for img_path in img_paths:
             img = cv2.imdecode(np.fromfile(img_path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE if input_shape[-1] == 1 else cv2.IMREAD_COLOR)
             img, output_image= self.predict(img)
-            img = self.resize(img, (input_shape[1], input_shape[0]))
+            img = DataGenerator.resize(img, (input_shape[1], input_shape[0]))
             img, output_image = self.make_border(img), self.make_border(output_image)
             img = img.reshape(img.shape + (1,))
             output_image = output_image.reshape(output_image.shape + (1,))
