@@ -99,16 +99,17 @@ class VariationalAutoEncoder:
     def compute_gradient(self, model, optimizer, x, y_true):
         with tf.GradientTape() as tape:
             y_pred, mu, log_var = model(x, training=True)
-            reconstruction_square = tf.square(y_true - y_pred)
-            reconstruction_loss = tf.reduce_sum(tf.reduce_mean(tf.reduce_mean(reconstruction_square, axis=0), axis=-1))
-            reconstruction_loss_mean = tf.reduce_mean(reconstruction_square)
+            reconstruction_loss = tf.reduce_mean(tf.square(y_true - y_pred))
+            balancing_ratio = (tf.cast(tf.shape(y_true)[1] + tf.shape(y_true)[2], dtype=tf.float32) * 0.5) / 32.0
+            balancing_factor = tf.pow(balancing_ratio, balancing_ratio) * 1024.0
+            kl_weight = (1.0 / balancing_factor) * tf.cast(tf.shape(mu)[-1], dtype=tf.float32)
             kl_divergence = -0.5 * (1.0 + log_var - tf.square(mu) - tf.exp(log_var))
-            kl_loss = tf.reduce_sum(tf.reduce_mean(kl_divergence, axis=0))
-            kl_loss_mean = tf.reduce_mean(kl_divergence)
+            kl_loss = tf.reduce_mean(kl_divergence) * kl_weight
+            kl_divergence_mean = tf.reduce_mean(kl_divergence)
             loss = reconstruction_loss + kl_loss
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        return reconstruction_loss_mean, kl_loss_mean
+        return reconstruction_loss, kl_divergence_mean
 
     def fit(self):
         self.model.summary()
@@ -120,7 +121,7 @@ class VariationalAutoEncoder:
         os.makedirs(self.checkpoint_path, exist_ok=True)
         while True:
             for batch_x in self.train_data_generator:
-                self.lr_scheduler.schedule_one_cycle(optimizer, iteration_count)
+                self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
                 reconstruction_loss, kl_loss = self.compute_gradient(self.vae, optimizer, batch_x, batch_x)
                 iteration_count += 1
                 print(f'[iteration count : {iteration_count:6d}] reconstruction_loss : {reconstruction_loss:.4f}, kl_loss : {kl_loss:.4f}')
@@ -145,7 +146,8 @@ class VariationalAutoEncoder:
 
     @tf.function
     def graph_forward(self, model, x):
-        return model(x, training=False)
+        with tf.device('/cpu:0'):
+            return model(x, training=False)
 
     def generate_random_image(self, size=1):
         z = np.asarray([DataGenerator.get_z_vector(size=self.latent_dim) for _ in range(size)]).astype('float32')
