@@ -72,7 +72,7 @@ class Model:
         x = self.conv2d_transpose(x, 64,  3, 2, activation='relu')
         x = self.conv2d_transpose(x, 32,  3, 2, activation='relu')
         x = self.conv2d_transpose(x, 16,  3, 2, activation='relu')
-        decoder_output = self.conv2d_transpose(x, self.input_shape[-1], 1, 1, activation='sigmoid')
+        decoder_output = self.conv2d_transpose(x, self.input_shape[-1], 1, 1, kernel_initializer='glorot_normal', activation='sigmoid')
         return decoder_input, decoder_output
 
     def sampling(self, mu, log_var):
@@ -84,26 +84,26 @@ class Model:
             return mu + K.exp(log_var * 0.5) * epsilon
         return tf.keras.layers.Lambda(function=function)([mu, log_var])
 
-    def conv2d(self, x, filters, kernel_size, strides=1, bn=False, activation='relu', alpha=0.2):
+    def conv2d(self, x, filters, kernel_size, strides, kernel_initializer='he_normal', bn=False, activation='relu', alpha=0.2):
         x = tf.keras.layers.Conv2D(
             strides=strides,
             filters=filters,
             padding='same',
             kernel_size=kernel_size,
             use_bias=False if bn else True,
-            kernel_initializer='he_normal')(x)
+            kernel_initializer=kernel_initializer)(x)
         if bn:
             x = tf.keras.layers.BatchNormalization()(x)
         return self.activation(x, activation)
 
-    def conv2d_transpose(self, x, filters, kernel_size, strides=1, bn=False, activation='relu', alpha=0.2):
+    def conv2d_transpose(self, x, filters, kernel_size, strides, kernel_initializer='he_normal', bn=False, activation='relu', alpha=0.2):
         x = tf.keras.layers.Conv2DTranspose(
             strides=strides,
             filters=filters,
             padding='same',
             kernel_size=kernel_size,
             use_bias=False if bn else True,
-            kernel_initializer='he_normal')(x)
+            kernel_initializer=kernel_initializer)(x)
         if bn:
             x = tf.keras.layers.BatchNormalization()(x)
         return self.activation(x, activation)
