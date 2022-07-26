@@ -39,7 +39,6 @@ class VariationalAutoEncoder:
                  batch_size=32,
                  latent_dim=32,
                  iterations=100000,
-                 validation_split=0.2,
                  view_grid_size=4,
                  validation_image_path='',
                  pretrained_model_path='',
@@ -65,35 +64,16 @@ class VariationalAutoEncoder:
         #     self.decoder = tf.keras.models.load_model(pretrained_model_path, compile=False)
         #     print(f'input_shape : {self.input_shape}')
 
-        if validation_image_path != '':
-            self.train_image_paths, _ = self.init_image_paths(train_image_path)
-            self.validation_image_paths, _ = self.init_image_paths(validation_image_path)
-        elif validation_split > 0.0:
-            self.train_image_paths, self.validation_image_paths = self.init_image_paths(train_image_path, validation_split=validation_split)
+        self.train_image_paths = self.init_image_paths(train_image_path)
         self.train_data_generator = DataGenerator(
             image_paths=self.train_image_paths,
             input_shape=input_shape,
             batch_size=batch_size,
             latent_dim=self.latent_dim)
-        self.validation_data_generator = DataGenerator(
-            image_paths=self.validation_image_paths,
-            input_shape=input_shape,
-            batch_size=batch_size,
-            latent_dim=self.latent_dim)
-        self.validation_data_generator_one_batch = DataGenerator(
-            image_paths=self.validation_image_paths,
-            input_shape=input_shape,
-            batch_size=1,
-            latent_dim=self.latent_dim)
         self.lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations)
 
-    def init_image_paths(self, image_path, validation_split=0.0):
-        all_image_paths = glob(f'{image_path}/**/*.jpg', recursive=True)
-        np.random.shuffle(all_image_paths)
-        num_train_images = int(len(all_image_paths) * (1.0 - validation_split))
-        image_paths = all_image_paths[:num_train_images]
-        validation_image_paths = all_image_paths[num_train_images:]
-        return image_paths, validation_image_paths
+    def init_image_paths(self, image_path):
+        return glob(f'{image_path}/**/*.jpg', recursive=True)
 
     @tf.function
     def compute_gradient(self, model, optimizer, x, y_true):
@@ -114,7 +94,6 @@ class VariationalAutoEncoder:
     def fit(self):
         self.model.summary()
         print(f'\ntrain on {len(self.train_image_paths)} samples.')
-        print(f'validate on {len(self.validation_image_paths)} samples.')
         print('start training')
         iteration_count = 0
         optimizer = tf.keras.optimizers.Adam(lr=self.lr)
