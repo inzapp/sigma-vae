@@ -40,7 +40,6 @@ class VariationalAutoEncoder:
                  latent_dim=32,
                  iterations=100000,
                  view_grid_size=4,
-                 validation_image_path='',
                  pretrained_model_path='',
                  checkpoint_path='checkpoints',
                  training_view=False):

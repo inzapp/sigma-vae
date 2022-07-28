@@ -23,7 +23,6 @@ if __name__ == '__main__':
     VariationalAutoEncoder(
         input_shape=(32, 32, 1),
         train_image_path=r'/train_data/mnist/train',
-        validation_image_path=r'/train_data/mnist/validation',
         lr=0.001,
         batch_size=32,
         latent_dim=2,
