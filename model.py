@@ -92,7 +92,7 @@ class Model:
             return mu + K.exp(log_var * 0.5) * epsilon
         return tf.keras.layers.Lambda(function=function)([mu, log_var])
 
-    def conv2d(self, x, filters, kernel_size, strides, kernel_initializer='he_normal', bn=False, activation='relu', alpha=0.2):
+    def conv2d(self, x, filters, kernel_size, strides, kernel_initializer='he_normal', bn=False, activation='relu'):
         x = tf.keras.layers.Conv2D(
             strides=strides,
             filters=filters,
@@ -104,7 +104,7 @@ class Model:
             x = tf.keras.layers.BatchNormalization()(x)
         return self.activation(x, activation)
 
-    def conv2d_transpose(self, x, filters, kernel_size, strides, kernel_initializer='he_normal', bn=False, activation='relu', alpha=0.2):
+    def conv2d_transpose(self, x, filters, kernel_size, strides, kernel_initializer='he_normal', bn=False, activation='relu'):
         x = tf.keras.layers.Conv2DTranspose(
             strides=strides,
             filters=filters,
@@ -116,7 +116,7 @@ class Model:
             x = tf.keras.layers.BatchNormalization()(x)
         return self.activation(x, activation)
 
-    def dense(self, x, units, bn=False, activation='relu', alpha=0.2):
+    def dense(self, x, units, bn=False, activation='relu'):
         x = tf.keras.layers.Dense(
             units=units,
             use_bias=False if bn else True,
@@ -125,7 +125,7 @@ class Model:
             x = tf.keras.layers.BatchNormalization()(x)
         return self.activation(x, activation)
 
-    def activation(self, x, activation, alpha=0.2):
+    def activation(self, x, activation, alpha=0.1):
         if activation == 'leaky':
             x = tf.keras.layers.LeakyReLU(alpha=alpha)(x)
         else:
