@@ -76,21 +76,25 @@ class VariationalAutoEncoder:
 
     @tf.function
     def compute_gradient(self, model, optimizer, x, y_true):
+        import tensorflow.keras.backend as K
+        def softclip(tensor, min_val):
+            return min_val + K.softplus(tensor - min_val)
+        def gaussian_nll(mu, log_sigma, x):
+            return 0.5 * K.square((x - mu) / K.exp(log_sigma)) + log_sigma + 0.5 * K.log(np.pi * 2.0)
         with tf.GradientTape() as tape:
+            batch_size = K.cast(K.shape(x)[0], dtype=tf.float32)
             y_pred, mu, log_var = model(x, training=True)
             mu_mean = tf.reduce_mean(mu)
             log_var_mean = tf.reduce_mean(log_var)
-            reconstruction_loss = tf.reduce_mean(tf.square(y_true - y_pred))
-            balancing_ratio = (tf.cast(tf.shape(y_true)[1] + tf.shape(y_true)[2], dtype=tf.float32) * 0.5) / 32.0
-            balancing_factor = tf.pow(balancing_ratio, balancing_ratio) * 1024.0
-            kl_weight = (1.0 / balancing_factor) * tf.cast(tf.shape(mu)[-1], dtype=tf.float32)
-            kl_divergence = -0.5 * (1.0 + log_var - tf.square(mu) - tf.exp(log_var))
-            kl_loss = tf.reduce_mean(kl_divergence) * kl_weight
-            kl_divergence_mean = tf.reduce_mean(kl_divergence)
+            log_sigma = K.log(K.sqrt(tf.reduce_mean(K.square(y_true - y_pred))))
+            log_sigma = softclip(log_sigma, -6.0)
+            reconstruction_loss = tf.reduce_sum(gaussian_nll(y_pred, log_sigma, y_true)) / batch_size
+            kl_loss = -0.5 * (1.0 + log_var - K.square(mu) - tf.exp(log_var))
+            kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
             loss = reconstruction_loss + kl_loss
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        return reconstruction_loss, kl_divergence_mean, mu_mean, log_var_mean
+        return reconstruction_loss, kl_loss, mu_mean, log_var_mean
 
     def fit(self):
         self.model.summary()
