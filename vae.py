@@ -78,6 +78,8 @@ class VariationalAutoEncoder:
     def compute_gradient(self, model, optimizer, x, y_true):
         with tf.GradientTape() as tape:
             y_pred, mu, log_var = model(x, training=True)
+            mu_mean = tf.reduce_mean(mu)
+            log_var_mean = tf.reduce_mean(log_var)
             reconstruction_loss = tf.reduce_mean(tf.square(y_true - y_pred))
             balancing_ratio = (tf.cast(tf.shape(y_true)[1] + tf.shape(y_true)[2], dtype=tf.float32) * 0.5) / 32.0
             balancing_factor = tf.pow(balancing_ratio, balancing_ratio) * 1024.0
@@ -88,7 +90,7 @@ class VariationalAutoEncoder:
             loss = reconstruction_loss + kl_loss
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        return reconstruction_loss, kl_divergence_mean
+        return reconstruction_loss, kl_divergence_mean, mu_mean, log_var_mean
 
     def fit(self):
         self.model.summary()
@@ -100,9 +102,9 @@ class VariationalAutoEncoder:
         while True:
             for batch_x in self.train_data_generator:
                 self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
-                reconstruction_loss, kl_loss = self.compute_gradient(self.vae, optimizer, batch_x, batch_x)
+                reconstruction_loss, kl_loss, mu, log_var = self.compute_gradient(self.vae, optimizer, batch_x, batch_x)
                 iteration_count += 1
-                print(f'[iteration count : {iteration_count:6d}] reconstruction_loss : {reconstruction_loss:.4f}, kl_loss : {kl_loss:.4f}')
+                print(f'[iteration count : {iteration_count:6d}] reconstruction_loss : {reconstruction_loss:.4f}, kl_loss : {kl_loss:.4f}, mu : {mu:.4f}, log_var : {log_var:.4f}')
                 if self.training_view:
                     self.training_view_function()
                 if iteration_count % 1000 == 0:
