@@ -96,13 +96,23 @@ class VariationalAutoEncoder:
             log_var_mean = tf.reduce_mean(log_var)
             log_sigma = tf.math.log(tf.sqrt(tf.reduce_mean(tf.square(y_true - y_pred))))
             log_sigma = softclip(log_sigma, -6.0)
+            log_sigma_mean = tf.reduce_mean(log_sigma)
             reconstruction_loss = tf.reduce_sum(tf.reduce_mean(gaussian_nll(y_pred, log_sigma, y_true), axis=0))
             kl_loss = -0.5 * (1.0 + log_var - tf.square(mu) - tf.exp(log_var))
             kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
             loss = reconstruction_loss + kl_loss
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        return reconstruction_loss, kl_loss, mu_mean, log_var_mean
+        return reconstruction_loss, kl_loss, mu_mean, log_var_mean, log_sigma
+
+    def build_loss_str(self, iteration_count, reconstruction_loss, kl_loss, mu, log_var, log_sigma, round_factor=4):
+        loss_str = f'[iteration_count : {iteration_count}]'
+        loss_str += f' reconstruction_loss : {str(round(float(reconstruction_loss), 4)):>10}'
+        loss_str += f', kl_loss: {str(round(float(kl_loss), round_factor)):>9}'
+        loss_str += f', mu : {str(round(float(mu), round_factor)):>8}'
+        loss_str += f', log_var : {str(round(float(log_var), round_factor)):>8}'
+        loss_str += f', log_sigma : {str(round(float(log_sigma), round_factor)):>8}'
+        return loss_str
 
     def fit(self):
         self.model.summary()
@@ -114,9 +124,9 @@ class VariationalAutoEncoder:
         while True:
             for batch_x in self.train_data_generator:
                 self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
-                reconstruction_loss, kl_loss, mu, log_var = self.compute_gradient(self.vae, optimizer, batch_x, batch_x)
+                reconstruction_loss, kl_loss, mu, log_var, log_sigma = self.compute_gradient(self.vae, optimizer, batch_x, batch_x)
                 iteration_count += 1
-                print(f'[iteration count : {iteration_count:6d}] reconstruction_loss : {reconstruction_loss:.4f}, kl_loss : {kl_loss:.4f}, mu : {mu:.4f}, log_var : {log_var:.4f}')
+                print(self.build_loss_str(iteration_count, reconstruction_loss, kl_loss, mu, log_var, log_sigma))
                 if self.training_view:
                     self.training_view_function()
                 if iteration_count % 1000 == 0:
