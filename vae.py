@@ -211,7 +211,7 @@ class VariationalAutoEncoder:
     def get_decoded_images(self):
         img_paths = np.random.choice(self.train_image_paths, size=self.view_grid_size, replace=False)
         input_shape = self.vae.input_shape[1:]
-        decoded_images_cat = None
+        decoded_image_grid = None
         for img_path in img_paths:
             img = cv2.imdecode(np.fromfile(img_path, dtype=np.uint8), cv2.IMREAD_GRAYSCALE if input_shape[-1] == 1 else cv2.IMREAD_COLOR)
             img, output_image= self.predict(img)
@@ -220,32 +220,32 @@ class VariationalAutoEncoder:
             if self.input_shape[-1] == 1:
                 img = img.reshape(img.shape + (1,))
                 output_image = output_image.reshape(output_image.shape + (1,))
-            imgs = np.concatenate([img, output_image], axis=1)
-            if decoded_images_cat is None:
-                decoded_images_cat = imgs
+            grid_row = np.concatenate([img, output_image], axis=1)
+            if decoded_image_grid is None:
+                decoded_image_grid = grid_row
             else:
-                decoded_images_cat = np.append(decoded_images_cat, imgs, axis=0)
-        return decoded_images_cat
+                decoded_image_grid = np.append(decoded_image_grid, grid_row, axis=0)
+        return decoded_image_grid
 
     def get_generated_images(self, grid_size):
-        generated_images_cat = None
         if self.latent_dim == 2:
             generated_images = self.generate_latent_space_2d(split_size=grid_size)
         else:
             generated_images = self.generate_random_image(size=grid_size * grid_size)
+        generated_image_grid = None
         for i in range(grid_size):
-            line = None
+            grid_row = None
             for j in range(grid_size):
-                generated_image = self.make_border(generated_images[i * grid_size + j])
-                if line is None:
-                    line = generated_image
+                generated_image = self.make_border(generated_images[i*grid_size+j])
+                if grid_row is None:
+                    grid_row = generated_image
                 else:
-                    line = np.append(line, generated_image, axis=1)
-            if generated_images_cat is None:
-                generated_images_cat = line
+                    grid_row = np.append(grid_row, generated_image, axis=1)
+            if generated_image_grid is None:
+                generated_image_grid = grid_row
             else:
-                generated_images_cat = np.append(generated_images_cat, line, axis=0)
-        return generated_images_cat
+                generated_image_grid = np.append(generated_image_grid, grid_row, axis=0)
+        return generated_image_grid
 
     def show_generated_images(self):
         while True:
