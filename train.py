@@ -31,7 +31,7 @@ if __name__ == '__main__':
         input_shape=(32, 32, 1),
         train_image_path=r'/train_data/mnist/train',
         lr=5e-4,
-        batch_size=32,
+        batch_size=64,
         latent_dim=2,
         view_grid_size=15,
         iterations=10000,
