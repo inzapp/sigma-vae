@@ -42,13 +42,14 @@ class VariationalAutoEncoder:
     def __init__(self,
                  train_image_path=None,
                  input_shape=(64, 64, 1),
-                 lr=0.001,
+                 lr=0.0005,
                  batch_size=32,
                  latent_dim=32,
                  iterations=100000,
                  view_grid_size=4,
                  pretrained_model_path='',
                  checkpoint_path='checkpoints',
+                 use_optimal_sigma=True,
                  training_view=False):
         assert input_shape[-1] in [1, 3]
         self.lr = lr
@@ -60,6 +61,7 @@ class VariationalAutoEncoder:
         self.latent_dim = latent_dim
         self.checkpoint_path = checkpoint_path
         self.view_grid_size = view_grid_size
+        self.use_optimal_sigma = use_optimal_sigma
         if self.latent_dim == -1:
             self.latent_dim = self.input_shape[0] // 32 * self.input_shape[1] // 32 * 256
 
@@ -85,29 +87,37 @@ class VariationalAutoEncoder:
     https://arxiv.org/pdf/2006.13202.pdf
     """
     @tf.function
-    def compute_gradient(self, model, optimizer, x, y_true):
+    def compute_gradient(self, model, optimizer, x, y_true, trainable_log_sigma, use_optimal_sigma):
         def softclip(tensor, min_val):
             return min_val + tf.keras.backend.softplus(tensor - min_val)
-        def gaussian_nll(mu, log_sigma, x):
-            return 0.5 * tf.square((x - mu) / tf.exp(log_sigma)) + log_sigma + 0.5 * tf.math.log(np.pi * 2.0)
+        def gaussian_nll(y_true, y_pred, soft_log_sigma):
+            return 0.5 * tf.square((y_true - y_pred) / tf.exp(soft_log_sigma)) + soft_log_sigma + 0.5 * tf.math.log(np.pi * 2.0)
         with tf.GradientTape() as tape:
             y_pred, mu, log_var = model(x, training=True)
             mu_mean = tf.reduce_mean(mu)
             log_var_mean = tf.reduce_mean(log_var)
             reconstruction_mse = tf.reduce_mean(tf.square(y_true - y_pred))
-            log_sigma = tf.math.log(tf.sqrt(reconstruction_mse))
-            log_sigma = softclip(log_sigma, -6.0)
+            if use_optimal_sigma:
+                log_sigma = tf.math.log(tf.sqrt(reconstruction_mse))
+            else:
+                log_sigma = trainable_log_sigma
             log_sigma_mean = tf.reduce_mean(log_sigma)
-            reconstruction_loss = tf.reduce_sum(tf.reduce_mean(gaussian_nll(y_pred, log_sigma, y_true), axis=0))
+            soft_log_sigma = softclip(log_sigma, -6.0)
+            reconstruction_loss = tf.reduce_sum(gaussian_nll(y_true, y_pred, soft_log_sigma))
             kl_loss = -0.5 * (1.0 + log_var - tf.square(mu) - tf.exp(log_var))
             kl_loss_mean = tf.reduce_mean(kl_loss)
-            kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
-            loss = reconstruction_loss + kl_loss
-        gradients = tape.gradient(loss, model.trainable_variables)
-        optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+            kl_loss = tf.reduce_sum(kl_loss)
+            loss = (reconstruction_loss + kl_loss) / tf.cast(tf.shape(y_true)[0], dtype=tf.float32)
+        if use_optimal_sigma:
+            trainable_variables = model.trainable_variables
+        else:
+            trainable_variables = model.trainable_variables + [trainable_log_sigma]
+        gradients = tape.gradient(loss, trainable_variables)
+        optimizer.apply_gradients(zip(gradients, trainable_variables))
         return reconstruction_mse, kl_loss_mean, mu_mean, log_var_mean, log_sigma_mean
 
-    def build_loss_str(self, iteration_count, reconstruction_mse, kl_loss, mu, log_var, log_sigma, round_factor=4):
+    def build_loss_str(self, iteration_count, loss_vars):
+        reconstruction_mse, kl_loss, mu, log_var, log_sigma = loss_vars
         loss_str = f'[iteration_count : {iteration_count:6d}]'
         loss_str += f' reconstruction_mse : {reconstruction_mse:.4f}'
         loss_str += f', kl_loss: {kl_loss:>8.4f}'
@@ -123,12 +133,13 @@ class VariationalAutoEncoder:
         iteration_count = 0
         optimizer = tf.keras.optimizers.Adam(lr=self.lr)
         os.makedirs(self.checkpoint_path, exist_ok=True)
+        log_sigma = tf.Variable(-2.0, trainable=True)
         while True:
             for batch_x in self.train_data_generator:
                 self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
-                reconstruction_mse, kl_loss, mu, log_var, log_sigma = self.compute_gradient(self.vae, optimizer, batch_x, batch_x)
+                loss_vars = self.compute_gradient(self.vae, optimizer, batch_x, batch_x, log_sigma, self.use_optimal_sigma)
                 iteration_count += 1
-                print(self.build_loss_str(iteration_count, reconstruction_mse, kl_loss, mu, log_var, log_sigma))
+                print(self.build_loss_str(iteration_count, loss_vars))
                 if self.training_view:
                     self.training_view_function()
                 if iteration_count % 1000 == 0:
