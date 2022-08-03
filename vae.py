@@ -101,7 +101,6 @@ class VariationalAutoEncoder:
                 log_sigma = tf.math.log(tf.sqrt(reconstruction_mse))
             else:
                 log_sigma = trainable_log_sigma
-            log_sigma_mean = tf.reduce_mean(log_sigma)
             soft_log_sigma = softclip(log_sigma, -6.0)
             reconstruction_loss = tf.reduce_sum(gaussian_nll(y_true, y_pred, soft_log_sigma))
             kl_loss = -0.5 * (1.0 + log_var - tf.square(mu) - tf.exp(log_var))
@@ -114,7 +113,7 @@ class VariationalAutoEncoder:
             trainable_variables = model.trainable_variables + [trainable_log_sigma]
         gradients = tape.gradient(loss, trainable_variables)
         optimizer.apply_gradients(zip(gradients, trainable_variables))
-        return reconstruction_mse, kl_loss_mean, mu_mean, log_var_mean, log_sigma_mean
+        return reconstruction_mse, kl_loss_mean, mu_mean, log_var_mean, log_sigma
 
     def build_loss_str(self, iteration_count, loss_vars):
         reconstruction_mse, kl_loss, mu, log_var, log_sigma = loss_vars
@@ -133,7 +132,7 @@ class VariationalAutoEncoder:
         iteration_count = 0
         optimizer = tf.keras.optimizers.Adam(lr=self.lr)
         os.makedirs(self.checkpoint_path, exist_ok=True)
-        log_sigma = tf.Variable(-2.0, trainable=True)
+        log_sigma = tf.Variable(-1.5, trainable=True)
         while True:
             for batch_x in self.train_data_generator:
                 self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
