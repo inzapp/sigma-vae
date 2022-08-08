@@ -42,6 +42,8 @@ class Model:
         self.latent_rows = input_shape[0] // 8
         self.latent_cols = input_shape[1] // 8
         self.latent_channels = 8192 // (self.latent_rows * self.latent_cols)
+        if self.latent_channels > 128:
+            self.latent_channels = 128
 
     def build(self):
         assert self.input_shape[0] % 32 == 0 and self.input_shape[1] % 32 == 0
