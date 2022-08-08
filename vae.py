@@ -144,7 +144,7 @@ class VariationalAutoEncoder:
                 if iteration_count % 1000 == 0:
                     model_path_without_extention = f'{self.checkpoint_path}/decoder_{iteration_count}_iter' 
                     self.decoder.save(f'{model_path_without_extention}.h5', include_optimizer=False)
-                    generated_images = self.get_generated_images(grid_size=25)
+                    generated_images = self.get_generated_images(grid_size=21 if self.latent_dim == 2 else 10)
                     cv2.imwrite(f'{model_path_without_extention}.jpg', generated_images)
                     print(f'[iteration count : {iteration_count:6d}] model with generated images saved with {model_path_without_extention} h5 and jpg\n')
                 if iteration_count == self.iterations:
