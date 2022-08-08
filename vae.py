@@ -51,7 +51,7 @@ class VariationalAutoEncoder:
                  checkpoint_path='checkpoints',
                  use_optimal_sigma=True,
                  training_view=False):
-        assert input_shape[-1] in [1, 3]
+        assert input_shape[2] in [1, 3]
         self.lr = lr
         self.iterations = iterations
         self.training_view = training_view
@@ -106,7 +106,7 @@ class VariationalAutoEncoder:
             kl_loss = -0.5 * (1.0 + log_var - tf.square(mu) - tf.exp(log_var))
             kl_loss_mean = tf.reduce_mean(kl_loss)
             kl_loss = tf.reduce_sum(kl_loss)
-            loss = (reconstruction_loss + kl_loss) / tf.cast(tf.shape(y_true)[0], dtype=tf.float32)
+            loss = (reconstruction_loss + kl_loss) / tf.cast(tf.shape(y_true)[0], dtype=tf.float32) / tf.cast(tf.reduce_sum(tf.shape(y_true)[1:]), dtype=tf.float32)
         if use_optimal_sigma:
             trainable_variables = model.trainable_variables
         else:
