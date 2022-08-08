@@ -27,7 +27,6 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import os
 import numpy as np
 import tensorflow as tf
-import tensorflow.keras.backend as K
 
 
 os.environ['TF_FORCE_GPU_ALLOW_GROWTH'] = 'true'
@@ -59,12 +58,15 @@ class Model:
     def build_encoder(self):
         encoder_input = tf.keras.layers.Input(shape=self.input_shape)
         x = encoder_input
-        x = self.conv2d(x,  32, 5, 2, activation='relu')
-        x = self.conv2d(x,  64, 5, 2, activation='relu')
-        x = self.conv2d(x, 128, 5, 2, activation='relu')
+        x = self.conv2d(x,  32, 3, 2, activation='relu')
+        x = self.conv2d(x,  64, 3, 1, activation='relu')
+        x = self.conv2d(x,  64, 3, 2, activation='relu')
+        x = self.conv2d(x, 128, 3, 1, activation='relu')
+        x = self.conv2d(x, 128, 3, 2, activation='relu')
         x = self.conv2d(x, self.latent_channels, 1, 1, activation='relu')
         x = self.flatten(x)
         x = self.dense(x, 2048, activation='relu')
+        x = self.dense(x,  512, activation='relu')
         mu = self.dense(x, self.latent_dim, activation='linear')
         log_var = self.dense(x, self.latent_dim, activation='linear')
         z = self.sampling(mu, log_var)
@@ -73,23 +75,24 @@ class Model:
     def build_decoder(self):
         decoder_input = tf.keras.layers.Input(shape=(self.latent_dim,))
         x = decoder_input
+        x = self.dense(x,  512, activation='relu')
         x = self.dense(x, 2048, activation='relu')
         x = self.dense(x, self.latent_rows * self.latent_cols * self.latent_channels, activation='relu')
         x = self.reshape(x, (self.latent_rows, self.latent_cols, self.latent_channels))
         x = self.conv2d_transpose(x, 128, 1, 1, activation='relu')
-        x = self.conv2d_transpose(x, 128, 5, 2, activation='relu')
-        x = self.conv2d_transpose(x,  64, 5, 2, activation='relu')
-        x = self.conv2d_transpose(x,  32, 5, 2, activation='relu')
+        x = self.conv2d_transpose(x, 128, 3, 2, activation='relu')
+        x = self.conv2d_transpose(x, 128, 3, 1, activation='relu')
+        x = self.conv2d_transpose(x,  64, 3, 2, activation='relu')
+        x = self.conv2d_transpose(x,  64, 3, 1, activation='relu')
+        x = self.conv2d_transpose(x,  32, 3, 2, activation='relu')
         decoder_output = self.conv2d_transpose(x, self.input_shape[-1], 1, 1, kernel_initializer='glorot_normal', activation='sigmoid')
         return decoder_input, decoder_output
 
     def sampling(self, mu, log_var):
         def function(args):
             mu, log_var = args
-            batch = K.shape(mu)[0]
-            dim = K.shape(mu)[1]
-            epsilon = K.random_normal(shape=(batch, dim))
-            return mu + K.exp(log_var * 0.5) * epsilon
+            epsilon = tf.random.normal(shape=tf.shape(mu))
+            return mu + tf.exp(log_var * 0.5) * epsilon
         return tf.keras.layers.Lambda(function=function)([mu, log_var])
 
     def conv2d(self, x, filters, kernel_size, strides, kernel_initializer='he_normal', bn=False, activation='relu'):
