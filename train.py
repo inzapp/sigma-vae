@@ -1,7 +1,7 @@
 """
 Authors : inzapp
 
-Github url : https://github.com/inzapp/vae
+Github url : https://github.com/inzapp/sigma-vae
 
 Copyright (c) 2022 Inzapp
 
@@ -24,10 +24,10 @@ LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
 OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
-from vae import VariationalAutoEncoder
+from sigma_vae import SigmaVAE 
 
 if __name__ == '__main__':
-    VariationalAutoEncoder(
+    SigmaVAE(
         input_shape=(32, 32, 1),
         train_image_path=r'/train_data/mnist/train',
         lr=0.001,

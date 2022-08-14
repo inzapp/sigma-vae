@@ -1,7 +1,7 @@
 """
 Authors : inzapp
 
-Github url : https://github.com/inzapp/vae
+Github url : https://github.com/inzapp/sigma-vae
 
 Copyright (c) 2022 Inzapp
 

@@ -1,7 +1,7 @@
 """
 Authors : inzapp
 
-Github url : https://github.com/inzapp/vae
+Github url : https://github.com/inzapp/sigma-vae
 
 Copyright (c) 2022 Inzapp
 
@@ -38,7 +38,7 @@ from lr_scheduler import LRScheduler
 from generator import DataGenerator
 
 
-class VariationalAutoEncoder:
+class SigmaVAE:
     def __init__(self,
                  train_image_path=None,
                  input_shape=(64, 64, 1),
@@ -135,7 +135,7 @@ class VariationalAutoEncoder:
         log_sigma = tf.Variable(-1.5, trainable=True)
         while True:
             for batch_x in self.train_data_generator:
-                self.lr_scheduler.schedule_step_decay(optimizer, iteration_count)
+                self.lr_scheduler.schedule_one_cycle(optimizer, iteration_count)
                 loss_vars = self.compute_gradient(self.vae, optimizer, batch_x, batch_x, log_sigma, self.use_optimal_sigma)
                 iteration_count += 1
                 print(self.build_loss_str(iteration_count, loss_vars))
