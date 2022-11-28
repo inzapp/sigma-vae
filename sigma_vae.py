@@ -29,7 +29,7 @@ import natsort
 import numpy as np
 import tensorflow as tf
 
-from cv2 import cv2
+import cv2
 from glob import glob
 from tqdm import tqdm
 from time import time
@@ -78,7 +78,6 @@ class SigmaVAE:
             input_shape=input_shape,
             batch_size=batch_size,
             latent_dim=self.latent_dim)
-        self.lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations)
 
     def init_image_paths(self, image_path):
         return glob(f'{image_path}/**/*.jpg', recursive=True)
@@ -133,9 +132,10 @@ class SigmaVAE:
         optimizer = tf.keras.optimizers.Adam(lr=self.lr)
         os.makedirs(self.checkpoint_path, exist_ok=True)
         log_sigma = tf.Variable(-1.5, trainable=True)
+        lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations, warm_up=0.5, policy='step')
         while True:
             for batch_x in self.train_data_generator:
-                self.lr_scheduler.schedule_one_cycle(optimizer, iteration_count)
+                lr_scheduler.update(optimizer, iteration_count)
                 loss_vars = self.compute_gradient(self.vae, optimizer, batch_x, batch_x, log_sigma, self.use_optimal_sigma)
                 iteration_count += 1
                 print(self.build_loss_str(iteration_count, loss_vars))
