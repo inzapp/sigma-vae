@@ -132,7 +132,7 @@ class SigmaVAE:
         optimizer = tf.keras.optimizers.Adam(lr=self.lr)
         os.makedirs(self.checkpoint_path, exist_ok=True)
         log_sigma = tf.Variable(-1.5, trainable=True)
-        lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations, warm_up=0.5, policy='step')
+        lr_scheduler = LRScheduler(lr=self.lr, iterations=self.iterations, policy='step')
         while True:
             for batch_x in self.train_data_generator:
                 lr_scheduler.update(optimizer, iteration_count)
@@ -144,7 +144,7 @@ class SigmaVAE:
                 if iteration_count % 1000 == 0:
                     model_path_without_extention = f'{self.checkpoint_path}/decoder_{iteration_count}_iter' 
                     self.decoder.save(f'{model_path_without_extention}.h5', include_optimizer=False)
-                    generated_images = self.get_generated_images(grid_size=21 if self.latent_dim == 2 else 10)
+                    generated_images = self.get_generated_images(self.view_grid_size)
                     cv2.imwrite(f'{model_path_without_extention}.jpg', generated_images)
                     print(f'[iteration count : {iteration_count:6d}] model with generated images saved with {model_path_without_extention} h5 and jpg\n')
                 if iteration_count == self.iterations:
@@ -160,8 +160,7 @@ class SigmaVAE:
 
     @tf.function
     def graph_forward(self, model, x):
-        with tf.device('/cpu:0'):
-            return model(x, training=False)
+        return model(x, training=False)
 
     def generate_random_image(self, size=1):
         z = np.asarray([DataGenerator.get_z_vector(size=self.latent_dim) for _ in range(size)]).astype('float32')
